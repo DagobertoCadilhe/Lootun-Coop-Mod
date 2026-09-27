@@ -17,7 +17,7 @@ Lootun (Steam, Windows) - BepInEx 5.4.x x64 Mono (or r2modman) - Visual Studio 2
 
 ## Testing a connection
 1. Both players: same LootunCoop commit and the **same BepInEx plugins** (the host rejects any mismatch and says which mod differs).
-2. Host: press **F7**, set a name, click **Host**. Allow the game through the Windows firewall (TCP port 28777 by default,
+2. Host: press **F7** (or click the small **Co-op** button, top-left), set a name, click **Host**. Allow the game through the Windows firewall (TCP port 28777 by default,
    `BepInEx\config\personal.lootuncoop.cfg`).
 3. Others: F7, enter the host's VPN IP (e.g. Radmin), click **Join**. The panel shows players, ping and a test chat.
    To test alone, run the host and join `127.0.0.1`.

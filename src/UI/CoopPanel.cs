@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace LootunCoop.UI
 {
-	/// <summary>Temporary IMGUI panel for connection testing. Toggled with F7; read via Event, so it works whatever input backend the game uses.</summary>
+	/// <summary>Temporary IMGUI panel for connection testing. Toggled with F7 or the small "Co-op" button in the top-left corner.</summary>
 	internal sealed class CoopPanel
 	{
 		const int WindowId = 0x4C43; // "LC"
@@ -20,16 +20,23 @@ namespace LootunCoop.UI
 			this.session = session;
 		}
 
-		public void OnGUI()
+		public void Toggle() => Visible = !Visible;
+
+		/// <param name="handleKey">Read F7 from IMGUI events (used when the game has legacy Input disabled).</param>
+		public void OnGUI(bool handleKey)
 		{
 			var e = Event.current;
-			if (e.type == EventType.KeyDown && e.keyCode == KeyCode.F7)
+			if (handleKey && e.type == EventType.KeyDown && e.keyCode == KeyCode.F7)
 			{
-				Visible = !Visible;
+				Toggle();
 				e.Use();
 			}
 			if (!Visible)
+			{
+				if (GUI.Button(new Rect(4, 4, 64, 20), "Co-op"))
+					Toggle();
 				return;
+			}
 			rect = GUILayout.Window(WindowId, rect, DrawWindow, "LootunCoop " + Plugin.PluginVersion + "  (F7)");
 		}
 
