@@ -3,5 +3,10 @@
     <!-- Each dev overrides this locally (Directory.Build.props.user or -p:GameDir=...) -->
     <GameDir Condition="'$(GameDir)' == '' and Exists('$(MSBuildThisFileDirectory)GameDir.user.txt')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)GameDir.user.txt').Trim())</GameDir>
     <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\Lootun</GameDir>
+    <!-- BepInEx folder, if not inside the game folder (r2modman keeps it in its profile) -->
+    <BepInExDir Condition="'$(BepInExDir)' == '' and Exists('$(MSBuildThisFileDirectory)BepInExDir.user.txt')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)BepInExDir.user.txt').Trim())</BepInExDir>
+    <BepInExDir Condition="'$(BepInExDir)' == ''">$(GameDir)\BepInEx</BepInExDir>
+    <!-- Exact DLL path to overwrite after each build (e.g. the file r2modman installed). Empty = copy to plugins\LootunCoop -->
+    <DeployPath Condition="'$(DeployPath)' == '' and Exists('$(MSBuildThisFileDirectory)DeployPath.user.txt')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)DeployPath.user.txt').Trim())</DeployPath>
   </PropertyGroup>
 </Project>

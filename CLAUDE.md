@@ -51,7 +51,8 @@ Ask the user for `LogOutput.log` after any risky change.
 ## Status / next steps
 - Done: transport (`src/Net/`), tested on loopback; F7 panel. In-game behavior unverified until someone runs it.
 - Next: phase 1 spike: client sends its one character, host starts an encounter with it next to the host's own (log-only).
-  Needs game code: `SaveFile.SaveCharacters/LoadCharacters`, `Encounter`, `Character`, how mission slots are created.
+  Game code for it is mapped in `docs/MULTIPLAYER.md` (mission slots, `SaveFile.SaveCharacter/LoadCharacter`, side effects).
+  `game-decompile/` (local, ILSpy export) is excluded from the build.
 - Both developers work on everything (no fixed split).
 
 ## Style
