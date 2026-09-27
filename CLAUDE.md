@@ -49,9 +49,10 @@ Ask the user for `LogOutput.log` after any risky change.
   in `Lootun_Data/Managed/`); it compiles as long as nothing references `Assembly-CSharp` types yet.
 
 ## Status / next steps
-- Done: transport (`src/Net/`), tested on loopback; F7 panel. In-game behavior unverified until someone runs it.
-- Next: phase 1 spike: client sends its one character, host starts an encounter with it next to the host's own (log-only).
-  Game code for it is mapped in `docs/MULTIPLAYER.md` (mission slots, `SaveFile.SaveCharacter/LoadCharacter`, side effects).
+- Done: transport (`src/Net/`, tested on loopback) and phases 1-3 from `docs/MULTIPLAYER.md` (guest characters, co-op mission
+  start, client-side mirror, reward/XP split, character lock) — all implemented and compiling, but unverified in game.
+- Next: phase 4 polish (see `docs/MULTIPLAYER.md`) and, above all, an actual in-game playtest (host + join over loopback or
+  VPN) to find what breaks; nothing past phase 0 has been run in the real game yet.
   `game-decompile/` (local, ILSpy export) is excluded from the build.
 - Both developers work on everything (no fixed split).
 
