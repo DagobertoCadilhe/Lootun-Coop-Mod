@@ -217,7 +217,9 @@ namespace LootunCoop.UI
 			showTools = GUILayout.Toggle(showTools, " Testing tools");
 			if (showTools)
 			{
-				if (GUILayout.Button("Add a clone of my selected character as a guest"))
+				GUI.enabled = CoopMission.CanAddClone;
+				if (GUILayout.Button(CoopMission.CanAddClone ? "Add a clone of my selected character as a guest"
+					: "Party full (" + CoopMission.MaxGuests + " guests max)"))
 					session.AddTestClone();
 				GUI.enabled = CoopMission.Guests.Keys.Any(k => k < 0);
 				if (GUILayout.Button("Update clones from my selected character"))
@@ -228,10 +230,21 @@ namespace LootunCoop.UI
 
 		void DrawClientCharacter()
 		{
+			if (CoopMirror.IsRunning)
+			{
+				GUILayout.Label(Color("In co-op", Good) + " on " + CoopMirror.Encounter.Map.Name + " with " + CharacterCodec.Describe(CoopMirror.Own ?? session.CoopCharacter), rich);
+				GUILayout.Label(Color("Your character's skills, passives and loadout are locked until the mission ends. Gear changes are"
+					+ " sent to the host automatically. XP, your share of items, gold and rubies arrive as you play.", Dim), rich);
+				return;
+			}
+			if (CoopMirror.Problem != null)
+				GUILayout.Label(Color("Can't show the co-op mission: " + CoopMirror.Problem, Bad), rich);
 			var c = GameData.CurrentCharacter;
 			GUILayout.Label("Selected: " + (c != null ? CharacterCodec.Describe(c) : Color("none", Warn)), rich);
+			if (session.SendProblem != null)
+				GUILayout.Label(Color(session.SendProblem, Warn), rich);
 			GUILayout.Label(Color("Select a character in Equipment: it's sent to the host automatically, and so are later changes"
-				+ " (gear, passives, skills). One character per player.", Dim), rich);
+				+ " (gear, passives, skills). One character per player. Keep one mission slot free to watch the fight.", Dim), rich);
 		}
 
 		void DrawLog()
@@ -270,6 +283,8 @@ namespace LootunCoop.UI
 				return "Mission board -> pick a mission -> Prepare Mission -> choose your character(s) -> Begin Co-op."
 					+ (waiting.Count > 0 ? Color("  (still waiting for " + string.Join(", ", waiting) + ")", Dim) : "");
 			}
+			if (IsConnectedClient && CoopMirror.IsRunning)
+				return "you're in the co-op mission: watch it in the Combat screen (CO-OP slot).";
 			if (IsConnectedClient)
 				return session.SentCharacter == null
 					? "select your character in Equipment; it is sent automatically."

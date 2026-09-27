@@ -21,6 +21,8 @@ namespace LootunCoop
 		public string LastError;
 		/// <summary>Client: description of the character last sent to the host, or null.</summary>
 		public string SentCharacter;
+		/// <summary>Client: why the selected character is not being sent, or null.</summary>
+		public string SendProblem;
 
 		public bool IsHost => host != null;
 		public bool IsClient => client != null;
@@ -50,6 +52,8 @@ namespace LootunCoop
 			{
 				AddChat("* " + p.Name + " joined");
 				CoopMission.NotifyChanged();
+				CoopMission.MakeRoomForPlayers();
+				CoopHostSync.OnPlayerJoined(h, p.Id);
 			};
 			h.PlayerLeft += (p, r) =>
 			{
@@ -78,6 +82,8 @@ namespace LootunCoop
 			LastError = null;
 			SentCharacter = null;
 			lastSent = null;
+			lastFingerprint = null;
+			sentCharacter = null;
 			var c = new CoopClient(new ClientOptions
 			{
 				PlayerName = name,
@@ -89,6 +95,7 @@ namespace LootunCoop
 			c.Disconnected += r =>
 			{
 				AddChat("* disconnected: " + r);
+				CoopMirror.End();
 				if (client != c)
 					return; // we called Leave()
 				client = null;
@@ -106,6 +113,7 @@ namespace LootunCoop
 			if (host != null)
 			{
 				CoopMission.Reset();
+				CoopHostSync.Reset();
 				host.Stop();
 				host = null;
 				AddChat("* stopped hosting");
@@ -115,6 +123,7 @@ namespace LootunCoop
 				var c = client;
 				client = null;
 				c.Disconnect();
+				CoopMirror.End();
 			}
 		}
 
@@ -122,6 +131,8 @@ namespace LootunCoop
 		{
 			host?.Poll();
 			client?.Poll();
+			if (host != null)
+				CoopHostSync.Tick(host);
 			AutoSendCharacter();
 		}
 
@@ -129,16 +140,23 @@ namespace LootunCoop
 		float nextCharacterCheck;
 		byte[] lastSent;
 
+		byte[] lastFingerprint;
+		Character sentCharacter;
+
+		/// <summary>Client: the character this player plays in co-op (the one in the mission, else the one last sent).</summary>
+		public Character CoopCharacter => CoopMirror.Own ?? sentCharacter;
+
 		/// <summary>
-		/// Client: every few seconds, serializes the selected character and sends it if anything changed (other character, gear,
-		/// gems, passives, skills, loadout...). The host swaps it in at the next stage.
+		/// Client: every few seconds, checks the co-op character and sends it if its build changed (other character, gear, gems,
+		/// passives, skills, loadout, level...). XP alone doesn't count. The host swaps it in at the next stage.
+		/// While a mission runs, the character in it is the one tracked, whatever is selected.
 		/// </summary>
 		void AutoSendCharacter()
 		{
 			if (client == null || client.State != ClientState.Connected || UnityEngine.Time.unscaledTime < nextCharacterCheck)
 				return;
 			nextCharacterCheck = UnityEngine.Time.unscaledTime + CharacterCheckSeconds;
-			if (GameData.CurrentCharacter != null)
+			if ((CoopMirror.Own ?? GameData.CurrentCharacter) != null)
 				SendCharacter(force: false);
 		}
 
@@ -161,28 +179,39 @@ namespace LootunCoop
 		{
 			if (client == null || client.State != ClientState.Connected)
 				return;
-			var c = GameData.CurrentCharacter;
+			var c = CoopMirror.Own ?? GameData.CurrentCharacter;
 			if (c == null)
 			{
 				AddChat("* no character selected");
 				return;
 			}
-			byte[] data;
+			if (c != CoopMirror.Own && c.ActiveEncounter != null)
+			{
+				// playing it here too would earn twice; wait until it's free
+				SendProblem = c.Name + " is in one of your missions. End that mission or select another character.";
+				return;
+			}
+			SendProblem = null;
+			byte[] data, fingerprint;
 			try
 			{
+				fingerprint = CharacterCodec.Fingerprint(c);
+				if (!force && c == sentCharacter && lastFingerprint != null && lastFingerprint.SequenceEqual(fingerprint))
+					return;
 				data = CharacterCodec.Serialize(c);
 			}
 			catch (Exception e)
 			{
 				Plugin.Log.LogError("[coop] could not serialize " + c.Name + ": " + e);
 				AddChat("* could not send " + c.Name + ": " + e.Message);
+				nextCharacterCheck = UnityEngine.Time.unscaledTime + 30f;
 				return;
 			}
-			if (!force && lastSent != null && lastSent.SequenceEqual(data))
-				return;
 			bool update = SentCharacter != null;
 			client.Send(MessageType.CharacterData, data);
 			lastSent = data;
+			lastFingerprint = fingerprint;
+			sentCharacter = c;
 			SentCharacter = CharacterCodec.Describe(c);
 			AddChat("* " + (update ? "updated " : "sent ") + SentCharacter);
 		}
@@ -191,7 +220,7 @@ namespace LootunCoop
 		public void AddTestClone()
 		{
 			var c = GameData.CurrentCharacter;
-			if (c == null)
+			if (c == null || !CoopMission.CanAddClone)
 				return;
 			byte[] data;
 			try
@@ -248,7 +277,7 @@ namespace LootunCoop
 				AddChat("* could not load " + owner + "'s character: " + e.Message);
 				return false;
 			}
-			CoopMission.SetGuest(playerId, owner, c);
+			CoopMission.SetGuest(playerId, owner, c, data);
 			Plugin.Log.LogInfo("[coop] guest #" + playerId + " " + owner + ": " + CharacterCodec.Describe(c) + ", " + data.Length + " bytes");
 			AddChat("* " + owner + " brings " + CharacterCodec.Describe(c));
 			return true;
@@ -256,11 +285,38 @@ namespace LootunCoop
 
 		void OnClientMessage(MessageType type, byte[] payload)
 		{
-			if (type != MessageType.Chat)
-				return;
-			ReadChat(payload, out int senderId, out string text);
-			var sender = client.Players.FirstOrDefault(p => p.Id == senderId);
-			AddChat((sender?.Name ?? "#" + senderId) + ": " + text);
+			try
+			{
+				switch (type)
+				{
+					case MessageType.Chat:
+						ReadChat(payload, out int senderId, out string text);
+						var sender = client.Players.FirstOrDefault(p => p.Id == senderId);
+						AddChat((sender?.Name ?? "#" + senderId) + ": " + text);
+						break;
+					case MessageType.CoopStart:
+						CoopMirror.Start(CoopStartMessage.Read(payload), client.LocalPlayerId, sentCharacter);
+						AddChat(CoopMirror.IsRunning ? "* co-op mission started" : "* co-op mission started, can't show it: " + CoopMirror.Problem);
+						break;
+					case MessageType.CoopSnapshot:
+						CoopMirror.Apply(CoopSnapshotMessage.Read(payload));
+						break;
+					case MessageType.CoopEnd:
+						CoopMirror.End();
+						AddChat("* co-op mission ended");
+						break;
+					case MessageType.CoopReward:
+						var reward = CoopRewardMessage.Read(payload);
+						CoopRewards.Apply(reward, CoopCharacter);
+						if (reward.Kind == RewardKind.Currency || reward.Kind == RewardKind.Item)
+							Plugin.Log.LogInfo("[coop] received " + reward.Kind + (reward.Kind == RewardKind.Item ? " " + reward.Item.ItemId : " " + reward.CurrencyAmount.ToString("0")));
+						break;
+				}
+			}
+			catch (Exception e)
+			{
+				Plugin.Log.LogError("[coop] failed to handle " + type + ": " + e);
+			}
 		}
 
 		static byte[] ChatPayload(int senderId, string text) => Payload.Build(w =>

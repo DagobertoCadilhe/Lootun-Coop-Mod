@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using LootClicker.Entities.Characters;
+using LootClicker.Entities.Skills;
 using LootClicker.Services;
 
 namespace LootunCoop.Game
@@ -55,6 +57,35 @@ namespace LootunCoop.Game
 				SaveFile.ReadData = readData;
 				SaveFile.LoadIndex = loadIndex;
 				SaveFile.IsBigEndian = bigEndian;
+			}
+		}
+
+		/// <summary>
+		/// Serialization with every experience value zeroed: equal fingerprints mean the same build, however much XP was gained.
+		/// The character is restored afterwards.
+		/// </summary>
+		public static byte[] Fingerprint(Character c)
+		{
+			int exp = c.CurrentExperience;
+			var skills = c.SkillDictionary.Values.Concat(c.FactionSkillDictionary.Values.Cast<MasterySkill>()).Where(s => s != null).Distinct()
+				.Select(s => (s, s.CurrentExperience)).ToList();
+			var ascendancies = c.Ascendancies.Values.Where(a => a != null).Select(a => (a, a.CurrentExperience)).ToList();
+			try
+			{
+				c.CurrentExperience = 0;
+				foreach (var (s, _) in skills)
+					s.CurrentExperience = 0;
+				foreach (var (a, _) in ascendancies)
+					a.CurrentExperience = 0;
+				return Serialize(c);
+			}
+			finally
+			{
+				c.CurrentExperience = exp;
+				foreach (var (s, e) in skills)
+					s.CurrentExperience = e;
+				foreach (var (a, e) in ascendancies)
+					a.CurrentExperience = e;
 			}
 		}
 

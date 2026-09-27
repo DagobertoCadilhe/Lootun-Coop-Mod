@@ -86,8 +86,17 @@ Goal: 3 players in normal missions (raids later), direct IP over a VPN (Radmin e
    passives, skills, loadout, other character). The host swaps it into the running encounter at the next stage
    (`Encounter.GetNextStage` prefix), never mid-fight; the replaced copy's combat XP is dropped until phase 3.
    Solo test: F7 host -> Testing tools -> clone / "Update clones from my selected character".
-2. **State mirror:** clients see the fight.
-3. **Progression:** drops, XP, result returned to each owner.
+2. **State mirror (implemented, untested in game):** on `CoopStart` (map, level, party bytes + owners) the client builds a real
+   `Encounter` in a free mission slot (`CoopMirror`) with its own real character plus read-only copies of the others. It never
+   ticks or spawns (`DoEncounterTick`/`GetNextStage` prefixes); `CoopSnapshot` (~5 Hz: stage, per character and monster
+   HP/barrier/attack timers, monsters by host net id) drives it through the entities' own setters, so the combat UI updates.
+   `CoopEnd` / disconnect ends it. Hidden from saves like the host's encounter. Needs one free slot on the client.
+3. **Progression (implemented, untested in game):** host-side, inside the co-op encounter (`ProcessSlainMonster` scope):
+   guest `AddExperience`/`AddSkillExperience` are forwarded to the owner (`CoopReward`) and skipped on the host; each
+   `Equipment.GenerateItemDrop` goes round-robin to host/guests (a guest's drop is re-rolled on their side with their filters;
+   the host rolls duplication); gold and rubies are split evenly. Other drop kinds (enchant scrolls, tools, materials,
+   Heart of the Abyss) still go to the host. The owner's character is locked meanwhile (`CharacterLock`): skills, passives,
+   ascendancy, loadout switch, respec; gear stays editable. Auto-send ignores XP-only changes (`CharacterCodec.Fingerprint`).
 4. **Polish:** disconnects, version/mod checks, separate save flag so co-op runs can't corrupt normal saves.
 
 ## Open questions / risks

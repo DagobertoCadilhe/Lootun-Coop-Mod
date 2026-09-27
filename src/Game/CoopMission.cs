@@ -20,6 +20,8 @@ namespace LootunCoop.Game
 		{
 			public Character Character;
 			public string Owner;
+			/// <summary>The bytes it arrived as, forwarded to the other players when the mission starts.</summary>
+			public byte[] Data;
 		}
 
 		/// <summary>Player id -> that player's character. Negative ids are local test clones.</summary>
@@ -40,7 +42,8 @@ namespace LootunCoop.Game
 
 		public static bool IsRunning => Encounter != null && GameData.Encounters != null && GameData.Encounters.Contains(Encounter);
 
-		public static bool IsGuest(Character c) => c != null && (Guests.Values.Any(g => g.Character == c)
+		/// <summary>Another player's character: a guest on the host, or a read-only copy in a client's mirror.</summary>
+		public static bool IsGuest(Character c) => c != null && (Guests.Values.Any(g => g.Character == c) || CoopMirror.IsForeign(c)
 			|| IsRunning && Encounter.Characters.Contains(c) && !GameData.Characters.Contains(c));
 
 		/// <summary>Name of the player who owns this guest character, or null.</summary>
@@ -53,8 +56,27 @@ namespace LootunCoop.Game
 				if (kv.Value.Character == c || InMission.TryGetValue(kv.Key, out var m) && m == c)
 					return kv.Value.Owner;
 			}
-			return null;
+			return CoopMirror.OwnerOf(c);
 		}
+
+		/// <summary>Host: player id owning this guest character (negative for test clones), or 0.</summary>
+		public static int PlayerIdOf(Character c)
+		{
+			foreach (var kv in InMission)
+			{
+				if (kv.Value == c)
+					return kv.Key;
+			}
+			foreach (var kv in Guests)
+			{
+				if (kv.Value.Character == c)
+					return kv.Key;
+			}
+			return 0;
+		}
+
+		/// <summary>Host: ids of the guests in the running co-op mission.</summary>
+		public static IEnumerable<int> PlayersInMission => IsRunning ? InMission.Keys.OrderBy(k => k) : Enumerable.Empty<int>();
 
 		/// <summary>Host: joined players who have not sent a character yet.</summary>
 		public static List<string> Waiting() => Plugin.Session.IsHost
@@ -64,14 +86,31 @@ namespace LootunCoop.Game
 		/// <summary>Slots taken by guests plus slots reserved for players still choosing.</summary>
 		public static int Reserved => Guests.Count + Waiting().Count;
 
+		/// <summary>Most guests a party can hold: 3 slots minus one for the host, and no more than the session's other players.</summary>
+		public static int MaxGuests => Math.Min(2, Plugin.MaxPlayers.Value - 1);
+
+		/// <summary>Room for another test clone next to the real guests and the players still choosing.</summary>
+		public static bool CanAddClone => Reserved < MaxGuests;
+
+		/// <summary>A real player joined: drop test clones until the party fits again.</summary>
+		public static void MakeRoomForPlayers()
+		{
+			while (Reserved > MaxGuests && Guests.Keys.Any(k => k < 0))
+			{
+				int clone = Guests.Keys.First(k => k < 0);
+				Plugin.Log.LogInfo("[coop] removing a test clone to make room for a player");
+				RemoveGuest(clone);
+			}
+		}
+
 		/// <summary>Max own characters the host can add next to the current guests.</summary>
 		public static int OwnSlotsLeft(PrepareMissionController window) =>
 			Math.Max(0, Math.Min(3, window != null && window.Map != null ? window.GetCharacterCount() : 3) - Reserved);
 
 		/// <summary>Replaces the guest's character. A running mission keeps the old one until it is restarted.</summary>
-		public static void SetGuest(int playerId, string owner, Character character)
+		public static void SetGuest(int playerId, string owner, Character character, byte[] data)
 		{
-			Guests[playerId] = new Guest { Character = character, Owner = owner };
+			Guests[playerId] = new Guest { Character = character, Owner = owner, Data = data };
 			Changed?.Invoke();
 		}
 
@@ -135,7 +174,7 @@ namespace LootunCoop.Game
 			int left = OwnSlotsLeft(window);
 			int own = window.GetCharacters().Count(c => !IsGuest(c));
 			if (own == 0)
-				return null; // let the game say a character is required
+				return "Pick at least one of your own characters: the host plays too.";
 			if (own > left)
 				return "Co-op: " + Guests.Count + " guest(s) join you, so pick at most " + left + " of your own characters.";
 			return null;
@@ -219,21 +258,29 @@ namespace LootunCoop.Game
 	[HarmonyPatch(typeof(SaveFile), nameof(SaveFile.SaveEncounters))]
 	static class HideCoopMissionFromSave
 	{
-		static void Prefix(out int __state)
+		/// <summary>Removes the host's co-op encounter and the client's mirror; remembers their positions to put them back.</summary>
+		static void Prefix(out List<(int Index, Encounter Encounter)> __state)
 		{
-			__state = -1;
-			var e = CoopMission.Encounter;
-			if (e == null || GameData.Encounters == null)
+			__state = new List<(int, Encounter)>();
+			if (GameData.Encounters == null)
 				return;
-			__state = GameData.Encounters.IndexOf(e);
-			if (__state >= 0)
-				GameData.Encounters.RemoveAt(__state);
+			for (int i = GameData.Encounters.Count - 1; i >= 0; i--)
+			{
+				var e = GameData.Encounters[i];
+				if (e != null && (e == CoopMission.Encounter || e == CoopMirror.Encounter))
+				{
+					__state.Insert(0, (i, e));
+					GameData.Encounters.RemoveAt(i);
+				}
+			}
 		}
 
-		static void Finalizer(int __state)
+		static void Finalizer(List<(int Index, Encounter Encounter)> __state)
 		{
-			if (__state >= 0)
-				GameData.Encounters.Insert(Math.Min(__state, GameData.Encounters.Count), CoopMission.Encounter);
+			if (__state == null)
+				return;
+			foreach (var (index, e) in __state)
+				GameData.Encounters.Insert(Math.Min(index, GameData.Encounters.Count), e);
 		}
 	}
 }
