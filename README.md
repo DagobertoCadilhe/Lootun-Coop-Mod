@@ -20,7 +20,10 @@ Lootun (Steam, Windows) - BepInEx 5.4.x x64 Mono (or r2modman) - Visual Studio 2
 2. Host: press **F7** (or click the small **Co-op** button, top-left), set a name, click **Host**. Allow the game through the Windows firewall (TCP port 28777 by default,
    `BepInEx\config\personal.lootuncoop.cfg`).
 3. Others: F7, enter the host's VPN IP (e.g. Radmin), click **Join**. The panel shows players, ping and a test chat.
-   To test alone, run the host and join `127.0.0.1`.
+   To test alone, host in game and run the console test client (no second game needed):
+   `LootunCoop.TestClient.exe [ip] [port] [name] [mods]`, e.g. `LootunCoop.TestClient.exe 127.0.0.1 28777 Bot`.
+   Type to chat, `/ping`, `/quit`. `mods` defaults to `personal.lootuncoop@0.0.1`; if the host rejects it, pass the list the
+   reject message shows (comma-separated `guid@version`). Build: `dotnet build tools/LootunCoop.TestClient -c Release`.
 
 ## Network tests (no game needed)
 `dotnet run --project tests/LootunCoop.NetTests -f net8.0` runs host/client scenarios over localhost (handshake, full session,
@@ -34,6 +37,7 @@ src/UI/CoopPanel.cs   F7 test panel (IMGUI)
 src/Net/              transport: framing, handshake, heartbeats (no Unity/game types, so it is testable outside the game)
 src/AccessChecks.cs   SkipVerification attribute (lets us use internal game members)
 tests/                loopback tests for src/Net
+tools/                console test client (a fake player)
 docs/MULTIPLAYER.md   design + phases
 CLAUDE.md             notes for AI assistants
 ```
