@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+GameDir.user.txt
+# Never commit game files or decompiled game source
+game-decompile/
+*.dll

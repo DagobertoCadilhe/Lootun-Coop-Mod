@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Each dev overrides this locally (Directory.Build.props.user or -p:GameDir=...) -->
+    <GameDir Condition="'$(GameDir)' == '' and Exists('$(MSBuildThisFileDirectory)GameDir.user.txt')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)GameDir.user.txt').Trim())</GameDir>
+    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\Lootun</GameDir>
+  </PropertyGroup>
+</Project>

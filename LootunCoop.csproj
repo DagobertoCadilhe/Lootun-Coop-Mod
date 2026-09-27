@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>LootunCoop</AssemblyName>
+    <RootNamespace>LootunCoop</RootNamespace>
+    <DebugType>portable</DebugType>
+    <NoWarn>$(NoWarn);CS0108;CS0114;CS1591;CS8981</NoWarn>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- GameDir vem de Directory.Build.props (ou GameDir.user.txt, nao versionado) -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Torna internal/protected do Assembly-CSharp acessivel em tempo de compilacao -->
+    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.2" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp" Publicize="true">
+      <HintPath>$(GameDir)\Lootun_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine"><HintPath>$(GameDir)\Lootun_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameDir)\Lootun_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(GameDir)\Lootun_Data\Managed\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(GameDir)\Lootun_Data\Managed\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GameDir)\Lootun_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameDir)\Lootun_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>$(GameDir)\Lootun_Data\Managed\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx"><HintPath>$(GameDir)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(GameDir)\BepInEx\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- Copia a DLL para BepInEx\plugins ao compilar (se a pasta do jogo existir) -->
+  <Target Name="CopyToGame" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx\plugins')">
+    <MakeDir Directories="$(GameDir)\BepInEx\plugins\LootunCoop" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameDir)\BepInEx\plugins\LootunCoop" />
+  </Target>
+
+</Project>
