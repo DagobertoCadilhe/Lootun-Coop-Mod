@@ -66,6 +66,8 @@ namespace LootunCoop.TestClient
 						client.Disconnect();
 						break;
 					}
+					if (line.Trim().Length == 0)
+						continue;
 					if (line.Trim() == "/ping")
 						Console.WriteLine("ping " + client.RttMs + " ms");
 					else

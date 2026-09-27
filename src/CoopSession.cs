@@ -127,6 +127,9 @@ namespace LootunCoop
 			if (type != MessageType.Chat)
 				return;
 			ReadChat(payload, out _, out string text);
+			text = text.Trim();
+			if (text.Length == 0)
+				return;
 			var sender = host.Players.FirstOrDefault(p => p.Id == playerId);
 			AddChat((sender?.Name ?? "#" + playerId) + ": " + text);
 			host.Broadcast(MessageType.Chat, ChatPayload(playerId, text));
