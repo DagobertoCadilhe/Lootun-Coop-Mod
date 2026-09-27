@@ -1,10 +1,13 @@
 using BepInEx;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using LootunCoop.Net;
+using LootunCoop.UI;
 
 namespace LootunCoop
 {
-	/// <summary>Co-op mod skeleton. See docs/MULTIPLAYER.md for the design and phases.</summary>
+	/// <summary>Co-op mod entry point. See docs/MULTIPLAYER.md for the design and phases.</summary>
 	[BepInPlugin(PluginGUID, PluginName, PluginVersion)]
 	public class Plugin : BaseUnityPlugin
 	{
@@ -13,12 +16,24 @@ namespace LootunCoop
 		public const string PluginVersion = "0.0.1";
 
 		internal static ManualLogSource Log;
+		internal static ConfigEntry<string> PlayerName;
+		internal static ConfigEntry<string> HostAddress;
+		internal static ConfigEntry<int> Port;
+		internal static ConfigEntry<int> MaxPlayers;
 
 		private void Awake()
 		{
 			Log = Logger;
+			PlayerName = Config.Bind("Coop", "PlayerName", "Player", "Name shown to other players.");
+			HostAddress = Config.Bind("Coop", "HostAddress", "", "Last host IP you joined (e.g. the host's Radmin VPN IP).");
+			Port = Config.Bind("Coop", "Port", Protocol.DefaultPort, "TCP port. The host must allow it through the Windows firewall.");
+			MaxPlayers = Config.Bind("Coop", "MaxPlayers", 3,
+				new ConfigDescription("Players per session including the host. 4 is raid-sized (untested).", new AcceptableValueRange<int>(2, Protocol.MaxPlayersLimit)));
+
+			var session = new CoopSession();
+			CoopRunner.Create(session, new CoopPanel(session));
 			new Harmony(PluginGUID).PatchAll();
-			Log.LogInfo(PluginName + " " + PluginVersion + " loaded (skeleton, no networking yet).");
+			Log.LogInfo(PluginName + " " + PluginVersion + " loaded. Press F7 or the Co-op button (top-left) for the panel.");
 		}
 	}
 }

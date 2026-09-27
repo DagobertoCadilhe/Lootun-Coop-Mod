@@ -4,7 +4,8 @@ Guidance for Claude Code (and other AI assistants) working in this repo. Humans:
 
 ## What this is
 **LootunCoop** — co-op multiplayer (up to 3 players, direct IP over VPN, normal missions first, raids later) as a BepInEx 5 + HarmonyLib
-mod for **Lootun** (Unity 2021.3, Mono, game code in `Assembly-CSharp`, namespaces `LootClicker.*`). Currently a **skeleton**: it only logs on load.
+mod for **Lootun** (Unity 2021.3, Mono, game code in `Assembly-CSharp`, namespaces `LootClicker.*`). Currently **transport only**: host/join, handshake,
+heartbeats and a test chat (F7 panel); no game state is shared yet.
 Design, phases and risks live in `docs/MULTIPLAYER.md` — read it first and keep it updated.
 Answer the user in the language they use (Brazilian Portuguese or English). Be concise.
 A sibling repo, **RoguePoison**, adds a custom class. Both mods may run together; keep this one independent of it (no shared IDs, no reference to it).
@@ -40,12 +41,18 @@ To read game code, decompile with ILSpy locally. Prefer reading real game classe
 ## Verifying changes
 1. Build the whole solution with 0 errors.
 2. If you can't launch the game, state that runtime behavior is unverified.
-3. If you can: launch, create a Rogue, check `BepInEx\LogOutput.log` for `[Error]` lines and `[ROGUE]` messages.
+3. If you can: launch, host (F7) and join `127.0.0.1` from a second instance or machine, check `BepInEx\LogOutput.log` for `[Error]` lines and `[host]`/`[client]` messages.
 Ask the user for `LogOutput.log` after any risky change.
 
+- Keep `src/Net/` free of Unity/BepInEx/game types so `tests/LootunCoop.NetTests` can compile it. Run those tests after any change there.
+- Without the game, build the mod against a stand-in `GameDir` (BepInEx 5 `core/` from its GitHub release + `UnityEngine.Modules` 2021.3 from nuget.org
+  in `Lootun_Data/Managed/`); it compiles as long as nothing references `Assembly-CSharp` types yet.
+
 ## Status / next steps
-- Phase 1 spike (not started): host receives a serialized character over TCP and starts an encounter with it next to the host's own.
-- Suggested split between developers: networking layer (TCP, framing, handshake, version/mod-list check) vs. game side (serialization, joining an `Encounter`, state mirror).
+- Done: transport (`src/Net/`), tested on loopback; F7 panel. In-game behavior unverified until someone runs it.
+- Next: phase 1 spike: client sends its one character, host starts an encounter with it next to the host's own (log-only).
+  Needs game code: `SaveFile.SaveCharacters/LoadCharacters`, `Encounter`, `Character`, how mission slots are created.
+- Both developers work on everything (no fixed split).
 
 ## Style
 - Match existing code style (tabs, braces on new lines in framework files). No comments explaining the obvious.
