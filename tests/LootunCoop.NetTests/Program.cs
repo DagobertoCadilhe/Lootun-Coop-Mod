@@ -29,6 +29,7 @@ namespace LootunCoop.NetTests
 			Run("garbage length prefix does not crash the host", GarbageFrame);
 			Run("connecting to a closed port fails cleanly", ConnectRefused);
 			Run("ping measures RTT", PingRtt);
+			Run("co-op start/snapshot/reward messages round-trip", CoopMessagesRoundTrip);
 			Console.WriteLine(failures == 0 ? "ALL PASSED" : failures + " FAILED");
 			return failures == 0 ? 0 : 1;
 		}
@@ -304,6 +305,35 @@ namespace LootunCoop.NetTests
 			Until(() => reason != null, "failure reported", 6000);
 			Check(reason.StartsWith("could not connect"), reason);
 			Check(c.State == ClientState.Disconnected, "state");
+		}
+
+		static void CoopMessagesRoundTrip()
+		{
+			var start = new CoopStartMessage { MapId = 7, MonsterLevel = 42, LevelScaling = true };
+			start.Party.Add(new PartyMember { OwnerId = 0, Owner = "Host", Character = new byte[] { 1, 2, 3 } });
+			start.Party.Add(new PartyMember { OwnerId = 2, Owner = "Bot", Character = new byte[3000] });
+			var s2 = CoopStartMessage.Read(start.Write());
+			Check(s2.MapId == 7 && s2.MonsterLevel == 42 && s2.LevelScaling, "start header");
+			Check(s2.Party.Count == 2 && s2.Party[1].Owner == "Bot" && s2.Party[1].OwnerId == 2 && s2.Party[1].Character.Length == 3000, "party");
+
+			var snap = new CoopSnapshotMessage { Stage = 3, BossStage = 10, IsBossStage = true };
+			snap.Characters.Add(new EntityState { Health = 50, MaxHealth = 100, Barrier = 5, MaxBarrier = 10, AttackTime = 1500, CurrentAttackTime = 700 });
+			snap.Monsters.Add(new MonsterState { NetId = 9, MonsterId = 123, Level = 40, Rarity = 2, Health = 1, MaxHealth = 999 });
+			var n2 = CoopSnapshotMessage.Read(snap.Write());
+			Check(n2.Stage == 3 && n2.BossStage == 10 && n2.IsBossStage, "snapshot header");
+			Check(n2.Characters[0].Health == 50 && n2.Characters[0].CurrentAttackTime == 700, "character state");
+			Check(n2.Monsters[0].NetId == 9 && n2.Monsters[0].MonsterId == 123 && n2.Monsters[0].Rarity == 2 && n2.Monsters[0].MaxHealth == 999, "monster state");
+
+			var xp = CoopRewardMessage.Read(new CoopRewardMessage { Kind = RewardKind.Experience, Amount = 123456789012 }.Write());
+			Check(xp.Kind == RewardKind.Experience && xp.Amount == 123456789012, "xp reward");
+			var gold = CoopRewardMessage.Read(new CoopRewardMessage { Kind = RewardKind.Currency, Currency = 1, CurrencyAmount = 12.5 }.Write());
+			Check(gold.Currency == 1 && gold.CurrencyAmount == 12.5, "currency reward");
+			var item = CoopRewardMessage.Read(new CoopRewardMessage
+			{
+				Kind = RewardKind.Item,
+				Item = new ItemDropArgs { ItemId = 55, Rarity = 4, ItemLevel = 100, NemesisChance = 1000, EnchantId = 3, MaxParagonLevel = 2, ScrapOverride = true },
+			}.Write());
+			Check(item.Item.ItemId == 55 && item.Item.Rarity == 4 && item.Item.NemesisChance == 1000 && item.Item.MaxParagonLevel == 2 && item.Item.ScrapOverride, "item reward");
 		}
 
 		static void PingRtt()
