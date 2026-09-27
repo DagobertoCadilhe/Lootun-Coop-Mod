@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <Compile Remove="tests/**" />
+    <Compile Remove="game-decompile/**" />
+    <None Remove="game-decompile/**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,14 +37,18 @@
     <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GameDir)\Lootun_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameDir)\Lootun_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.TextMeshPro"><HintPath>$(GameDir)\Lootun_Data\Managed\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="BepInEx"><HintPath>$(GameDir)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="0Harmony"><HintPath>$(GameDir)\BepInEx\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx"><HintPath>$(BepInExDir)\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(BepInExDir)\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
-  <!-- Copia a DLL para BepInEx\plugins ao compilar (se a pasta do jogo existir) -->
-  <Target Name="CopyToGame" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx\plugins')">
-    <MakeDir Directories="$(GameDir)\BepInEx\plugins\LootunCoop" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameDir)\BepInEx\plugins\LootunCoop" />
+  <!-- Copies the DLL into the game after each build: to DeployPath if set, else BepInEx\plugins\LootunCoop -->
+  <Target Name="CopyToGame" AfterTargets="Build" Condition="'$(DeployPath)' == '' and Exists('$(BepInExDir)\plugins')">
+    <MakeDir Directories="$(BepInExDir)\plugins\LootunCoop" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BepInExDir)\plugins\LootunCoop" />
+  </Target>
+  <Target Name="CopyToDeployPath" AfterTargets="Build" Condition="'$(DeployPath)' != ''">
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(DeployPath)" />
+    <Message Importance="high" Text="Deployed to $(DeployPath)" />
   </Target>
 
 </Project>

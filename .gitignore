@@ -3,6 +3,8 @@ obj/
 .vs/
 *.user
 GameDir.user.txt
+BepInExDir.user.txt
+DeployPath.user.txt
 # Never commit game files or decompiled game source
 game-decompile/
 *.dll
