@@ -3,7 +3,7 @@ namespace LootunCoop.Net
 	/// <summary>Wire constants. Bump <see cref="Version"/> on any incompatible change to framing or message layouts.</summary>
 	public static class Protocol
 	{
-		public const int Version = 1;
+		public const int Version = 2;
 		public const int DefaultPort = 28777;
 		public const int HostPlayerId = 0;
 		public const int MaxPlayersLimit = 4;
@@ -28,5 +28,7 @@ namespace LootunCoop.Net
 		Goodbye = 8,
 
 		Chat = Protocol.FirstGameMessage,
+		/// <summary>Client -> host: one character in SaveFile.SaveCharacter format.</summary>
+		CharacterData = 33,
 	}
 }

@@ -20,6 +20,7 @@ namespace LootunCoop
 		internal static ConfigEntry<string> HostAddress;
 		internal static ConfigEntry<int> Port;
 		internal static ConfigEntry<int> MaxPlayers;
+		internal static CoopSession Session;
 
 		private void Awake()
 		{
@@ -30,7 +31,7 @@ namespace LootunCoop
 			MaxPlayers = Config.Bind("Coop", "MaxPlayers", 3,
 				new ConfigDescription("Players per session including the host. 4 is raid-sized (untested).", new AcceptableValueRange<int>(2, Protocol.MaxPlayersLimit)));
 
-			var session = new CoopSession();
+			var session = Session = new CoopSession();
 			CoopRunner.Create(session, new CoopPanel(session));
 			new Harmony(PluginGUID).PatchAll();
 			Log.LogInfo(PluginName + " " + PluginVersion + " loaded. Press F7 or the Co-op button (top-left) for the panel.");

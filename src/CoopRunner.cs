@@ -1,4 +1,5 @@
 using System;
+using LootunCoop.Game;
 using LootunCoop.UI;
 using UnityEngine;
 
@@ -16,6 +17,7 @@ namespace LootunCoop
 		bool loggedGui;
 		bool legacyInput = true;
 		bool quitting;
+		float nextUiRefresh;
 
 		internal static CoopRunner Create(CoopSession session, CoopPanel panel)
 		{
@@ -49,6 +51,12 @@ namespace LootunCoop
 				}
 			}
 			Session.Poll();
+			MenuButton.Update(Panel, Session);
+			if (Time.unscaledTime >= nextUiRefresh)
+			{
+				nextUiRefresh = Time.unscaledTime + 0.5f;
+				PrepareMissionButton.Refresh();
+			}
 		}
 
 		void OnGUI()

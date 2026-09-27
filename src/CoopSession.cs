@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using BepInEx.Bootstrap;
+using LootClicker.Entities.Characters;
+using LootunCoop.Game;
 using LootunCoop.Net;
 
 namespace LootunCoop
@@ -17,6 +19,8 @@ namespace LootunCoop
 
 		public readonly List<string> Chat = new List<string>();
 		public string LastError;
+		/// <summary>Client: description of the character last sent to the host, or null.</summary>
+		public string SentCharacter;
 
 		public bool IsHost => host != null;
 		public bool IsClient => client != null;
@@ -42,8 +46,17 @@ namespace LootunCoop
 				Mods = LoadedMods(),
 			});
 			h.Log += m => Plugin.Log.LogInfo("[host] " + m);
-			h.PlayerJoined += p => AddChat("* " + p.Name + " joined");
-			h.PlayerLeft += (p, r) => AddChat("* " + p.Name + " left (" + r + ")");
+			h.PlayerJoined += p =>
+			{
+				AddChat("* " + p.Name + " joined");
+				CoopMission.NotifyChanged();
+			};
+			h.PlayerLeft += (p, r) =>
+			{
+				AddChat("* " + p.Name + " left (" + r + ")");
+				CoopMission.RemoveGuest(p.Id);
+				CoopMission.NotifyChanged();
+			};
 			h.MessageReceived += OnHostMessage;
 			try
 			{
@@ -63,6 +76,8 @@ namespace LootunCoop
 		{
 			Leave();
 			LastError = null;
+			SentCharacter = null;
+			lastSent = null;
 			var c = new CoopClient(new ClientOptions
 			{
 				PlayerName = name,
@@ -90,6 +105,7 @@ namespace LootunCoop
 		{
 			if (host != null)
 			{
+				CoopMission.Reset();
 				host.Stop();
 				host = null;
 				AddChat("* stopped hosting");
@@ -106,6 +122,24 @@ namespace LootunCoop
 		{
 			host?.Poll();
 			client?.Poll();
+			AutoSendCharacter();
+		}
+
+		const float CharacterCheckSeconds = 2f;
+		float nextCharacterCheck;
+		byte[] lastSent;
+
+		/// <summary>
+		/// Client: every few seconds, serializes the selected character and sends it if anything changed (other character, gear,
+		/// gems, passives, skills, loadout...). The host swaps it in at the next stage.
+		/// </summary>
+		void AutoSendCharacter()
+		{
+			if (client == null || client.State != ClientState.Connected || UnityEngine.Time.unscaledTime < nextCharacterCheck)
+				return;
+			nextCharacterCheck = UnityEngine.Time.unscaledTime + CharacterCheckSeconds;
+			if (GameData.CurrentCharacter != null)
+				SendCharacter(force: false);
 		}
 
 		public void SendChat(string text)
@@ -122,14 +156,102 @@ namespace LootunCoop
 				client.Send(MessageType.Chat, ChatPayload(client.LocalPlayerId, text));
 		}
 
+		/// <summary>Client: sends the currently selected character to the host (unless unchanged and not forced).</summary>
+		public void SendCharacter(bool force = true)
+		{
+			if (client == null || client.State != ClientState.Connected)
+				return;
+			var c = GameData.CurrentCharacter;
+			if (c == null)
+			{
+				AddChat("* no character selected");
+				return;
+			}
+			byte[] data;
+			try
+			{
+				data = CharacterCodec.Serialize(c);
+			}
+			catch (Exception e)
+			{
+				Plugin.Log.LogError("[coop] could not serialize " + c.Name + ": " + e);
+				AddChat("* could not send " + c.Name + ": " + e.Message);
+				return;
+			}
+			if (!force && lastSent != null && lastSent.SequenceEqual(data))
+				return;
+			bool update = SentCharacter != null;
+			client.Send(MessageType.CharacterData, data);
+			lastSent = data;
+			SentCharacter = CharacterCodec.Describe(c);
+			AddChat("* " + (update ? "updated " : "sent ") + SentCharacter);
+		}
+
+		/// <summary>Host: adds a copy of the selected character as a fake guest, to test without a second player.</summary>
+		public void AddTestClone()
+		{
+			var c = GameData.CurrentCharacter;
+			if (c == null)
+				return;
+			byte[] data;
+			try
+			{
+				data = CharacterCodec.Serialize(c);
+			}
+			catch (Exception e)
+			{
+				Plugin.Log.LogError("[coop] could not serialize " + c.Name + ": " + e);
+				AddChat("* could not clone " + c.Name + ": " + e.Message);
+				return;
+			}
+			if (TryLoadGuest(-1 - CoopMission.Guests.Keys.Count(k => k < 0), "Test", data))
+				Plugin.Log.LogInfo("[coop] clone source was " + CharacterCodec.Describe(c));
+		}
+
+		/// <summary>Host: re-copies the selected character into every test clone, like a guest sending an update.</summary>
+		public void RefreshTestClones()
+		{
+			var c = GameData.CurrentCharacter;
+			if (c == null)
+				return;
+			foreach (int id in CoopMission.Guests.Keys.Where(k => k < 0).ToList())
+				TryLoadGuest(id, "Test", CharacterCodec.Serialize(c));
+		}
+
 		void OnHostMessage(int playerId, MessageType type, byte[] payload)
 		{
-			if (type != MessageType.Chat)
-				return;
-			ReadChat(payload, out _, out string text);
 			var sender = host.Players.FirstOrDefault(p => p.Id == playerId);
-			AddChat((sender?.Name ?? "#" + playerId) + ": " + text);
-			host.Broadcast(MessageType.Chat, ChatPayload(playerId, text));
+			string name = sender?.Name ?? "#" + playerId;
+			switch (type)
+			{
+				case MessageType.Chat:
+					ReadChat(payload, out _, out string text);
+					AddChat(name + ": " + text);
+					host.Broadcast(MessageType.Chat, ChatPayload(playerId, text));
+					break;
+				case MessageType.CharacterData:
+					TryLoadGuest(playerId, name, payload);
+					break;
+			}
+		}
+
+		bool TryLoadGuest(int playerId, string owner, byte[] data)
+		{
+			Character c;
+			try
+			{
+				c = CharacterCodec.Deserialize(data);
+			}
+			catch (Exception e)
+			{
+				Plugin.Log.LogError("[coop] bad character from " + owner + " (" + data.Length + " bytes): " + e);
+				AddChat("* could not load " + owner + "'s character: " + e.Message);
+				return false;
+			}
+			CoopMission.SetGuest(playerId, owner, c);
+			Plugin.Log.LogInfo("[coop] guest #" + playerId + " " + owner + ": " + CharacterCodec.Describe(c) + ", " + data.Length + " bytes");
+			AddChat("* " + owner + " brings " + CharacterCodec.Describe(c));
+			return true;
 		}
 
 		void OnClientMessage(MessageType type, byte[] payload)
