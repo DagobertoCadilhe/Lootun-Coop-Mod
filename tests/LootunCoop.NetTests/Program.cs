@@ -147,8 +147,8 @@ namespace LootunCoop.NetTests
 			c.Connect("127.0.0.1", h.Port);
 			Until(() => reason != null, "rejected");
 			Check(reason.Contains("mod list mismatch"), reason);
-			Check(reason.Contains("you are missing some.other.mod@1.2.0"), reason);
-			Check(reason.Contains("host does not have extra.mod@1.0, some.other.mod@1.1.0"), reason);
+			Check(reason.Contains("some.other.mod version differs (host 1.2.0, you 1.1.0)"), reason);
+			Check(reason.Contains("host does not have extra.mod@1.0") && !reason.Contains("you are missing"), reason);
 			Check(h.Players.Count == 1, "not added");
 			h.Stop();
 		}

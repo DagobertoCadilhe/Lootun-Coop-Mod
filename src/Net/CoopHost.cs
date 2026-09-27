@@ -289,6 +289,18 @@ namespace LootunCoop.Net
 			if (missing.Count == 0 && extra.Count == 0)
 				return null;
 			var parts = new List<string>();
+			// same mod id on both sides with different versions: report it as a version difference
+			string Id(string mod) => mod.Split('@')[0];
+			string Version(string mod) => mod.Contains("@") ? mod.Substring(mod.IndexOf('@') + 1) : "?";
+			foreach (var hm in missing.ToList())
+			{
+				var cm = extra.FirstOrDefault(x => string.Equals(Id(x), Id(hm), StringComparison.OrdinalIgnoreCase));
+				if (cm == null)
+					continue;
+				parts.Add(Id(hm) + " version differs (host " + Version(hm) + ", you " + Version(cm) + ")");
+				missing.Remove(hm);
+				extra.Remove(cm);
+			}
 			if (missing.Count > 0)
 				parts.Add("you are missing " + string.Join(", ", missing));
 			if (extra.Count > 0)
