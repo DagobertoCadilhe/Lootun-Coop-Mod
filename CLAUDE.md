@@ -49,7 +49,8 @@ Ask the user for `LogOutput.log` after any risky change.
   in `Lootun_Data/Managed/`); it compiles as long as nothing references `Assembly-CSharp` types yet.
 
 ## Status / next steps
-- Done: transport (`src/Net/`), tested on loopback; F7 panel. In-game behavior unverified until someone runs it.
+- Done: transport (`src/Net/`), loopback tests; F7 panel. Verified in game: hosting, F7 panel, test client joining + chat both ways.
+  Not yet verified: two real game instances over Radmin.
 - Next: phase 1 spike: client sends its one character, host starts an encounter with it next to the host's own (log-only).
   Needs game code: `SaveFile.SaveCharacters/LoadCharacters`, `Encounter`, `Character`, how mission slots are created.
 - Both developers work on everything (no fixed split).

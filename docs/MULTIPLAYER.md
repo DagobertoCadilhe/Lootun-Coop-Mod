@@ -39,7 +39,7 @@ Goal: 3 players in normal missions (raids later), direct IP over a VPN (Radmin e
 - Threading: one reader + one writer thread per connection; everything reaches game code through `Poll()` on Unity's main thread.
 
 ## Phases
-0. **Transport (done, tested on loopback):** host/join, handshake, version + mod-list check, heartbeats, chat, F7 test panel.
+0. **Transport (done; in-game host verified with the console test client):** host/join, handshake, version + mod-list check, heartbeats, chat, F7 test panel.
 1. **Spike (log-only):** host receives a character over TCP and starts an encounter with it alongside the host's own.
 2. **State mirror:** clients see the fight.
 3. **Progression:** drops, XP, result returned to each owner.
