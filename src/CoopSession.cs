@@ -84,6 +84,7 @@ namespace LootunCoop
 			lastSent = null;
 			lastFingerprint = null;
 			sentCharacter = null;
+			lastSentLevel = -1;
 			var c = new CoopClient(new ClientOptions
 			{
 				PlayerName = name,
@@ -142,6 +143,8 @@ namespace LootunCoop
 
 		byte[] lastFingerprint;
 		Character sentCharacter;
+		/// <summary>Level last sent, so a level-up always resends even though the fingerprint ignores XP.</summary>
+		int lastSentLevel = -1;
 
 		/// <summary>Client: the character this player plays in co-op (the one in the mission, else the one last sent).</summary>
 		public Character CoopCharacter => CoopMirror.Own ?? sentCharacter;
@@ -196,7 +199,8 @@ namespace LootunCoop
 			try
 			{
 				fingerprint = CharacterCodec.Fingerprint(c);
-				if (!force && c == sentCharacter && lastFingerprint != null && lastFingerprint.SequenceEqual(fingerprint))
+				if (!force && c == sentCharacter && c.Level == lastSentLevel
+					&& lastFingerprint != null && lastFingerprint.SequenceEqual(fingerprint))
 					return;
 				data = CharacterCodec.Serialize(c);
 			}
@@ -212,6 +216,7 @@ namespace LootunCoop
 			lastSent = data;
 			lastFingerprint = fingerprint;
 			sentCharacter = c;
+			lastSentLevel = c.Level;
 			SentCharacter = CharacterCodec.Describe(c);
 			AddChat("* " + (update ? "updated " : "sent ") + SentCharacter);
 		}

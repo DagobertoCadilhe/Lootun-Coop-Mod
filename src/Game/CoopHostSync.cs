@@ -14,7 +14,7 @@ namespace LootunCoop.Game
 	/// </summary>
 	internal static class CoopHostSync
 	{
-		const float SnapshotSeconds = 0.2f;
+		const float SnapshotSeconds = 0.1f;
 		static Encounter announced;
 		static float nextSnapshot;
 		static int nextMonsterId = 1;

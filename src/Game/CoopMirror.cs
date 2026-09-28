@@ -110,7 +110,7 @@ namespace LootunCoop.Game
 			e.IsBossStage = s.IsBossStage;
 
 			for (int i = 0; i < s.Characters.Count && i < e.Characters.Count; i++)
-				ApplyState(e.Characters[i], s.Characters[i]);
+				ApplyCharacterState(e.Characters[i], s.Characters[i]);
 
 			bool monstersChanged = s.Monsters.Count != e.Monsters.Count
 				|| s.Monsters.Where((m, i) => !monsters.TryGetValue(m.NetId, out var mon) || e.Monsters[i] != mon).Any();
@@ -162,6 +162,22 @@ namespace LootunCoop.Game
 			entity.CurrentBarrier = st.Barrier;
 			entity.AttackTime = st.AttackTime;
 			entity.CurrentAttackTime = st.CurrentAttackTime;
+		}
+
+		/// <summary>
+		/// Same as <see cref="ApplyState"/>, plus: the mirror never ticks, so nothing ever plays the game's own "back to life"
+		/// transition on these read-only copies (own or foreign) after a party wipe and auto-restart on the host. Without this,
+		/// a revived character's health bar updates but its panel can be left showing the death pose until the player switches
+		/// tabs and the whole panel rebuilds from scratch. Call the game's own reset here instead, same as a guest swap does.
+		/// </summary>
+		static void ApplyCharacterState(Character c, EntityState st)
+		{
+			if (c == null)
+				return;
+			bool reviving = c.CurrentHealth <= 0 && st.Health > 0;
+			ApplyState(c, st);
+			if (reviving)
+				c.CombatReset();
 		}
 
 		public static void End()
