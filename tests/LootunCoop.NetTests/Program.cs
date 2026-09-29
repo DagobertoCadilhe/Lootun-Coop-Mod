@@ -30,6 +30,10 @@ namespace LootunCoop.NetTests
 			Run("connecting to a closed port fails cleanly", ConnectRefused);
 			Run("ping measures RTT", PingRtt);
 			Run("co-op start/snapshot/reward messages round-trip", CoopMessagesRoundTrip);
+			Run("snapshot playback stays smooth and steady under jitter", PlaybackUnderJitter);
+			Run("snapshot playback recovers from a stall without going back in time", PlaybackAfterStall);
+			Run("snapshot playback with delay 0 shows the newest snapshot", PlaybackWithoutDelay);
+			Run("snapshot playback ignores stale and duplicate snapshots", PlaybackIgnoresStale);
 			Console.WriteLine(failures == 0 ? "ALL PASSED" : failures + " FAILED");
 			return failures == 0 ? 0 : 1;
 		}
@@ -316,11 +320,11 @@ namespace LootunCoop.NetTests
 			Check(s2.MapId == 7 && s2.MonsterLevel == 42 && s2.LevelScaling, "start header");
 			Check(s2.Party.Count == 2 && s2.Party[1].Owner == "Bot" && s2.Party[1].OwnerId == 2 && s2.Party[1].Character.Length == 3000, "party");
 
-			var snap = new CoopSnapshotMessage { Stage = 3, BossStage = 10, IsBossStage = true };
+			var snap = new CoopSnapshotMessage { HostTimeMs = 9876543210L, Stage = 3, BossStage = 10, IsBossStage = true };
 			snap.Characters.Add(new EntityState { Health = 50, MaxHealth = 100, Barrier = 5, MaxBarrier = 10, AttackTime = 1500, CurrentAttackTime = 700 });
 			snap.Monsters.Add(new MonsterState { NetId = 9, MonsterId = 123, Level = 40, Rarity = 2, Health = 1, MaxHealth = 999 });
 			var n2 = CoopSnapshotMessage.Read(snap.Write());
-			Check(n2.Stage == 3 && n2.BossStage == 10 && n2.IsBossStage, "snapshot header");
+			Check(n2.HostTimeMs == 9876543210L && n2.Stage == 3 && n2.BossStage == 10 && n2.IsBossStage, "snapshot header");
 			Check(n2.Characters[0].Health == 50 && n2.Characters[0].CurrentAttackTime == 700, "character state");
 			Check(n2.Monsters[0].NetId == 9 && n2.Monsters[0].MonsterId == 123 && n2.Monsters[0].Rarity == 2 && n2.Monsters[0].MaxHealth == 999, "monster state");
 
@@ -376,6 +380,94 @@ namespace LootunCoop.NetTests
 			while (read < len)
 				read += s.Read(body, read, len - read);
 			return Tuple.Create((MessageType)body[0], body.Skip(1).ToArray());
+		}
+
+		// ---- snapshot playback: no sockets, a simulated host sending at 20 Hz and a client rendering at 60 fps ----
+
+		sealed class Snap
+		{
+			public long Time;
+		}
+
+		/// <summary>
+		/// The host sends every 50 ms (host and client clocks share an origin here). Each snapshot lands 40 ms + random jitter
+		/// later, in order like TCP. Snapshots sent during the stall are held back and all land together when it ends.
+		/// </summary>
+		static void SimulatePlayback(int delayMs, int jitterMs, int durationMs, int stallFromMs, int stallMs,
+			Action<double, Snap, Snap, double, SnapshotPlayback<Snap>> frame)
+		{
+			var rng = new Random(1234);
+			var arrivals = new List<Tuple<double, Snap>>();
+			double last = 0;
+			for (long h = 0; h <= durationMs; h += 50)
+			{
+				double at = h + 40 + rng.Next(jitterMs + 1);
+				if (h >= stallFromMs && h < stallFromMs + stallMs)
+					at = Math.Max(at, stallFromMs + stallMs + 40);
+				last = at = Math.Max(at, last);
+				arrivals.Add(Tuple.Create(at, new Snap { Time = h }));
+			}
+			var p = new SnapshotPlayback<Snap>();
+			int next = 0;
+			const double frameMs = 1000.0 / 60;
+			for (double now = 0; now <= durationMs; now += frameMs)
+			{
+				for (; next < arrivals.Count && arrivals[next].Item1 <= now; next++)
+					p.Add(arrivals[next].Item2.Time, arrivals[next].Item2);
+				if (p.Advance(frameMs, delayMs, out var from, out var to, out double t))
+					frame(now, from, to, t, p);
+			}
+		}
+
+		static void PlaybackUnderJitter()
+		{
+			double prev = double.MinValue, minLag = double.MaxValue, maxLag = 0;
+			int frames = 0, starved = 0;
+			SimulatePlayback(100, 30, 20000, -1, 0, (now, from, to, t, p) =>
+			{
+				Check(p.PlaybackMs >= prev, "playback went backwards at " + now);
+				prev = p.PlaybackMs;
+				Check(t >= 0 && t <= 1, "blend factor " + t);
+				if (now < 2000)
+					return;
+				frames++;
+				if (to == null)
+					starved++;
+				else
+					Check(from.Time <= p.PlaybackMs && p.PlaybackMs < to.Time, "not between the two snapshots at " + now);
+				double lag = now - p.PlaybackMs;
+				minLag = Math.Min(minLag, lag);
+				maxLag = Math.Max(maxLag, lag);
+			});
+			Check(starved * 100 <= frames, "ran out of snapshots on " + starved + " of " + frames + " frames");
+			Check(minLag > 100 && maxLag < 280, "shown " + minLag.ToString("0") + "-" + maxLag.ToString("0") + " ms behind the host");
+		}
+
+		static void PlaybackAfterStall()
+		{
+			double prev = double.MinValue;
+			SimulatePlayback(100, 30, 8000, 3000, 600, (now, from, to, t, p) =>
+			{
+				Check(p.PlaybackMs >= prev, "playback went backwards at " + now);
+				prev = p.PlaybackMs;
+				if (now > 3000 + 600 + 1000)
+					Check(now - p.PlaybackMs < 280, (now - p.PlaybackMs).ToString("0") + " ms behind at " + now + ", 1 s after the stall");
+			});
+		}
+
+		static void PlaybackWithoutDelay()
+		{
+			SimulatePlayback(0, 30, 3000, -1, 0, (now, from, to, t, p) =>
+				Check(to == null && p.Count == 1 && from.Time == p.PlaybackMs, "not showing the newest snapshot at " + now));
+		}
+
+		static void PlaybackIgnoresStale()
+		{
+			var p = new SnapshotPlayback<Snap>();
+			Check(p.Add(100, new Snap { Time = 100 }), "first");
+			Check(!p.Add(100, new Snap { Time = 100 }), "duplicate accepted");
+			Check(!p.Add(50, new Snap { Time = 50 }), "older accepted");
+			Check(p.Add(150, new Snap { Time = 150 }) && p.Count == 2, "newer rejected");
 		}
 	}
 }

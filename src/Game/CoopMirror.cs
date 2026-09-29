@@ -100,31 +100,76 @@ namespace LootunCoop.Game
 			Plugin.Log.LogInfo("[mirror] watching co-op on " + map.Name + " with " + string.Join(", ", characters.Select(CharacterCodec.Describe)));
 		}
 
-		public static void Apply(CoopSnapshotMessage s)
+		static readonly SnapshotPlayback<CoopSnapshotMessage> playback = new SnapshotPlayback<CoopSnapshotMessage>();
+		/// <summary>The snapshot whose stage and monster list are currently in the encounter.</summary>
+		static CoopSnapshotMessage structure;
+
+		public static void Receive(CoopSnapshotMessage s)
+		{
+			if (IsRunning)
+				playback.Add(s.HostTimeMs, s);
+		}
+
+		/// <summary>
+		/// Every frame: shows the fight InterpolationDelayMs behind the host, blended between the two snapshots around that
+		/// moment (see <see cref="SnapshotPlayback{T}"/>), instead of jumping to each snapshot as it arrives.
+		/// </summary>
+		public static void Update(float deltaSeconds)
 		{
 			var e = Encounter;
-			if (e == null || !IsRunning)
+			if (e == null || !IsRunning || !playback.Advance(deltaSeconds * 1000.0, Plugin.InterpolationDelayMs.Value, out var from, out var to, out double t))
 				return;
-			bool stageChanged = e.CurrentStage != s.Stage || e.IsBossStage != s.IsBossStage;
-			e.CurrentStage = s.Stage;
-			e.IsBossStage = s.IsBossStage;
 
-			for (int i = 0; i < s.Characters.Count && i < e.Characters.Count; i++)
-				ApplyCharacterState(e.Characters[i], s.Characters[i]);
+			bool advanced = from != structure, stageChanged = false, monstersChanged = false;
+			if (advanced)
+			{
+				structure = from;
+				stageChanged = e.CurrentStage != from.Stage || e.IsBossStage != from.IsBossStage;
+				e.CurrentStage = from.Stage;
+				e.IsBossStage = from.IsBossStage;
+				monstersChanged = MonstersDiffer(e, from.Monsters);
+				if (monstersChanged)
+					RebuildMonsters(e, from.Monsters);
+			}
 
-			bool monstersChanged = s.Monsters.Count != e.Monsters.Count
-				|| s.Monsters.Where((m, i) => !monsters.TryGetValue(m.NetId, out var mon) || e.Monsters[i] != mon).Any();
-			if (monstersChanged)
-				RebuildMonsters(e, s.Monsters);
-			for (int i = 0; i < s.Monsters.Count && i < e.Monsters.Count; i++)
-				ApplyState(e.Monsters[i], s.Monsters[i]);
+			for (int i = 0; i < from.Characters.Count && i < e.Characters.Count; i++)
+				ApplyCharacterState(e.Characters[i], from.Characters[i], to != null && i < to.Characters.Count ? to.Characters[i] : null, t);
+			foreach (var ms in from.Monsters)
+			{
+				if (monsters.TryGetValue(ms.NetId, out var mon))
+					ApplyState(mon, ms, to != null ? FindMonster(to.Monsters, ms.NetId) : null, t);
+			}
 
+			if (!advanced)
+				return;
 			var menu = GameData.GameController.Menu.CombatMenu;
 			if (monstersChanged)
 				menu.UpdateMonsterPanel(e);
 			if (stageChanged)
 				menu.UpdateBossProgressBar(e);
 			e.EncounterPreview?.MissionPreview?.UpdateCharacterStatus(e);
+		}
+
+		static bool MonstersDiffer(Encounter e, List<MonsterState> states)
+		{
+			if (states.Count != e.Monsters.Count)
+				return true;
+			for (int i = 0; i < states.Count; i++)
+			{
+				if (!monsters.TryGetValue(states[i].NetId, out var m) || e.Monsters[i] != m)
+					return true;
+			}
+			return false;
+		}
+
+		static MonsterState FindMonster(List<MonsterState> states, int netId)
+		{
+			foreach (var s in states)
+			{
+				if (s.NetId == netId)
+					return s;
+			}
+			return null;
 		}
 
 		static void RebuildMonsters(Encounter e, List<MonsterState> states)
@@ -152,16 +197,22 @@ namespace LootunCoop.Game
 			e.Monsters = list;
 		}
 
-		static void ApplyState(Entity entity, EntityState st)
+		/// <summary>Writes the state blended a -> b by t (just a when b is null).</summary>
+		static void ApplyState(Entity entity, EntityState a, EntityState b, double t)
 		{
 			if (entity == null)
 				return;
-			entity.MaxHealth = st.MaxHealth;
-			entity.MaxBarrier = st.MaxBarrier;
-			entity.CurrentHealth = st.Health;
-			entity.CurrentBarrier = st.Barrier;
-			entity.AttackTime = st.AttackTime;
-			entity.CurrentAttackTime = st.CurrentAttackTime;
+			if (b == null)
+			{
+				b = a;
+				t = 0;
+			}
+			entity.MaxHealth = Lerp(a.MaxHealth, b.MaxHealth, t);
+			entity.MaxBarrier = Lerp(a.MaxBarrier, b.MaxBarrier, t);
+			entity.CurrentHealth = Lerp(a.Health, b.Health, t);
+			entity.CurrentBarrier = Lerp(a.Barrier, b.Barrier, t);
+			entity.AttackTime = a.AttackTime;
+			entity.CurrentAttackTime = LerpTimer(a, b, t);
 		}
 
 		/// <summary>
@@ -170,14 +221,32 @@ namespace LootunCoop.Game
 		/// a revived character's health bar updates but its panel can be left showing the death pose until the player switches
 		/// tabs and the whole panel rebuilds from scratch. Call the game's own reset here instead, same as a guest swap does.
 		/// </summary>
-		static void ApplyCharacterState(Character c, EntityState st)
+		static void ApplyCharacterState(Character c, EntityState a, EntityState b, double t)
 		{
 			if (c == null)
 				return;
-			bool reviving = c.CurrentHealth <= 0 && st.Health > 0;
-			ApplyState(c, st);
-			if (reviving)
+			bool wasDead = c.CurrentHealth <= 0;
+			ApplyState(c, a, b, t);
+			if (wasDead && c.CurrentHealth > 0)
 				c.CombatReset();
+		}
+
+		static float Lerp(float a, float b, double t) => (float)(a + (b - a) * t);
+
+		/// <summary>
+		/// The action timer restarts every attack, so a big jump between two snapshots means it wrapped around once: blend the
+		/// short way round instead of sweeping the bar backwards. Works whether the timer counts up or down.
+		/// </summary>
+		static int LerpTimer(EntityState a, EntityState b, double t)
+		{
+			int period = a.AttackTime;
+			double delta = b.CurrentAttackTime - a.CurrentAttackTime;
+			if (period <= 0)
+				return (int)(a.CurrentAttackTime + delta * t);
+			if (Math.Abs(delta) > period / 2.0)
+				delta -= Math.Sign(delta) * period;
+			double v = (a.CurrentAttackTime + delta * t) % period;
+			return (int)(v < 0 ? v + period : v);
 		}
 
 		public static void End()
@@ -196,6 +265,8 @@ namespace LootunCoop.Game
 			Own = null;
 			owners.Clear();
 			monsters.Clear();
+			playback.Clear();
+			structure = null;
 		}
 	}
 

@@ -9,12 +9,12 @@ using UnityEngine;
 namespace LootunCoop.Game
 {
 	/// <summary>
-	/// Host side of phase 2: tells clients when the co-op mission starts/ends and streams snapshots of it (~5 Hz) so their
-	/// <see cref="CoopMirror"/> can show the fight.
+	/// Host side of phase 2: tells clients when the co-op mission starts/ends and streams timestamped snapshots of it (~20 Hz)
+	/// so their <see cref="CoopMirror"/> can play the fight back smoothly.
 	/// </summary>
 	internal static class CoopHostSync
 	{
-		const float SnapshotSeconds = 0.1f;
+		const float SnapshotSeconds = 0.05f;
 		static Encounter announced;
 		static float nextSnapshot;
 		static int nextMonsterId = 1;
@@ -70,7 +70,7 @@ namespace LootunCoop.Game
 
 		static CoopSnapshotMessage BuildSnapshot(Encounter e)
 		{
-			var s = new CoopSnapshotMessage { Stage = e.CurrentStage, BossStage = e.BossStage, IsBossStage = e.IsBossStage };
+			var s = new CoopSnapshotMessage { HostTimeMs = Clock.NowMs, Stage = e.CurrentStage, BossStage = e.BossStage, IsBossStage = e.IsBossStage };
 			foreach (Character c in e.Characters)
 				s.Characters.Add(State(new EntityState(), c));
 			foreach (var m in e.Monsters.Where(m => m != null))

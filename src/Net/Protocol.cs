@@ -3,7 +3,7 @@ namespace LootunCoop.Net
 	/// <summary>Wire constants. Bump <see cref="Version"/> on any incompatible change to framing or message layouts.</summary>
 	public static class Protocol
 	{
-		public const int Version = 3;
+		public const int Version = 4;
 		public const int DefaultPort = 28777;
 		public const int HostPlayerId = 0;
 		public const int MaxPlayersLimit = 4;
@@ -32,7 +32,7 @@ namespace LootunCoop.Net
 		CharacterData = 33,
 		/// <summary>Host -> clients: a co-op mission started (map, level, party characters with owners).</summary>
 		CoopStart = 34,
-		/// <summary>Host -> clients, ~5 Hz: stage, character and monster health/barrier/action timers.</summary>
+		/// <summary>Host -> clients, ~20 Hz: host time, stage, character and monster health/barrier/action timers.</summary>
 		CoopSnapshot = 35,
 		/// <summary>Host -> clients: the co-op mission ended.</summary>
 		CoopEnd = 36,

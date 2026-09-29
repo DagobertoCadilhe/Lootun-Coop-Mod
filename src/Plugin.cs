@@ -20,6 +20,7 @@ namespace LootunCoop
 		internal static ConfigEntry<string> HostAddress;
 		internal static ConfigEntry<int> Port;
 		internal static ConfigEntry<int> MaxPlayers;
+		internal static ConfigEntry<int> InterpolationDelayMs;
 		internal static CoopSession Session;
 
 		private void Awake()
@@ -30,6 +31,10 @@ namespace LootunCoop
 			Port = Config.Bind("Coop", "Port", Protocol.DefaultPort, "TCP port. The host must allow it through the Windows firewall.");
 			MaxPlayers = Config.Bind("Coop", "MaxPlayers", 3,
 				new ConfigDescription("Players per session including the host. 4 is raid-sized (untested).", new AcceptableValueRange<int>(2, Protocol.MaxPlayersLimit)));
+			InterpolationDelayMs = Config.Bind("Coop", "InterpolationDelayMs", 100,
+				new ConfigDescription("Joining players only: how far behind the host the co-op fight is shown, so it can be smoothed between "
+					+ "snapshots. Raise it if bars still stutter on a bad connection, lower it to see things sooner. 0 = off (jump to each snapshot).",
+					new AcceptableValueRange<int>(0, 500)));
 
 			var session = Session = new CoopSession();
 			CoopRunner.Create(session, new CoopPanel(session));
