@@ -60,6 +60,8 @@ Goal: 3 players in normal missions (raids later), direct IP over a VPN (Radmin e
 - Everyone needs identical mod lists and versions (handshake check).
 
 ## Wire protocol (implemented, `src/Net/`)
+- Current `Protocol.Version`: **4** (v4 added `HostTimeMs` to `CoopSnapshot`). How players install, connect and fix rejections:
+  `README.md` ("Playing co-op", "Troubleshooting").
 - Frame: `int32 LE length` + `byte type` + payload; length counts type + payload, max 8 MB. Strings are `BinaryWriter` UTF-8.
 - Handshake: client sends `Hello` (protocol version, mod version, name, `guid@version` of every loaded BepInEx plugin).
   Host answers `Welcome` (your id + player list) or `Reject` (reason) and closes. Protocol and mod list must match exactly.
