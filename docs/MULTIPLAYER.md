@@ -54,12 +54,14 @@ Goal: 3 players in normal missions (raids later), direct IP over a VPN (Radmin e
 - **Host-authoritative.** The host runs the `Encounter` with all party characters. Clients do not simulate combat.
 - **Transport:** plain TCP, length-prefixed messages, direct IP (works over Radmin/VPN).
 - **Client -> host:** serialized character (build, gear, skills) on join; changes between fights.
-- **Host -> clients:** snapshots ~5 Hz (monsters, HP/barrier, buffs/DoT stacks), rendered by the game's own combat UI
-  from a "shadow" encounter that does not tick locally.
+- **Host -> clients:** timestamped snapshots ~20 Hz (monsters, HP/barrier, attack timers), rendered by the game's own combat
+  UI from a "shadow" encounter that does not tick locally, played back slightly delayed and interpolated (see phase 2).
 - **Rewards:** host generates drops/XP; each owner receives their own items/progress.
 - Everyone needs identical mod lists and versions (handshake check).
 
 ## Wire protocol (implemented, `src/Net/`)
+- Current `Protocol.Version`: **4** (v4 added `HostTimeMs` to `CoopSnapshot`). How players install, connect and fix rejections:
+  `README.md` ("Playing co-op", "Troubleshooting").
 - Frame: `int32 LE length` + `byte type` + payload; length counts type + payload, max 8 MB. Strings are `BinaryWriter` UTF-8.
 - Handshake: client sends `Hello` (protocol version, mod version, name, `guid@version` of every loaded BepInEx plugin).
   Host answers `Welcome` (your id + player list) or `Reject` (reason) and closes. Protocol and mod list must match exactly.
@@ -88,9 +90,20 @@ Goal: 3 players in normal missions (raids later), direct IP over a VPN (Radmin e
    Solo test: F7 host -> Testing tools -> clone / "Update clones from my selected character".
 2. **State mirror (implemented, untested in game):** on `CoopStart` (map, level, party bytes + owners) the client builds a real
    `Encounter` in a free mission slot (`CoopMirror`) with its own real character plus read-only copies of the others. It never
-   ticks or spawns (`DoEncounterTick`/`GetNextStage` prefixes); `CoopSnapshot` (~5 Hz: stage, per character and monster
-   HP/barrier/attack timers, monsters by host net id) drives it through the entities' own setters, so the combat UI updates.
-   `CoopEnd` / disconnect ends it. Hidden from saves like the host's encounter. Needs one free slot on the client.
+   ticks or spawns (`DoEncounterTick`/`GetNextStage` prefixes); `CoopSnapshot` (~20 Hz: host time, stage, per character and
+   monster HP/barrier/attack timers, monsters by host net id) drives it through the entities' own setters, so the combat UI
+   updates. `CoopEnd` / disconnect ends it. Hidden from saves like the host's encounter. Needs one free slot on the client.
+   Smoothing (protocol v4): snapshot interpolation, the standard approach for server-authoritative games (Valve Source,
+   Gaffer On Games "Snapshot Interpolation", Mirror/Unity Netcode). Applying each snapshot on arrival made bars move in
+   visible steps and jitter with the network (first playtest: "slightly laggy" for the joining player; 5 -> 10 Hz alone
+   didn't help). Now the client shows the fight `InterpolationDelayMs` (config, default 100, 0 = off) behind the newest
+   snapshot and blends HP/barrier/attack timers between the two snapshots around that moment every frame; stage and
+   monster-list changes apply when playback reaches their snapshot. Timing lives in `src/Net/SnapshotPlayback.cs` (unit
+   tested): the playback clock runs up to 10% fast/slow to hold the delay, only ever jumps forward, holds the newest when
+   starved. Over TCP there's no loss/reordering to cover, so ~2 snapshot intervals is enough (UDP games use ~3x). Simulated
+   at 20 Hz with 30-80 ms jitter it never ran dry and stayed within ~10 ms of a steady delay. Attack timers blend the short
+   way round when they wrap. Prediction/extrapolation doesn't fit: HP changes are RNG-driven and the guest has no live input.
+   Playtested 2026-09-29 (host + friend over VPN, default 100 ms): the joiner's view was much smoother than before.
 3. **Progression (implemented, untested in game):** host-side, inside the co-op encounter (`ProcessSlainMonster` scope):
    guest `AddExperience`/`AddSkillExperience` are forwarded to the owner (`CoopReward`) and skipped on the host; each
    `Equipment.GenerateItemDrop` goes round-robin to host/guests (a guest's drop is re-rolled on their side with their filters;

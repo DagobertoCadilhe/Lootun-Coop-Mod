@@ -4,15 +4,21 @@ Guidance for Claude Code (and other AI assistants) working in this repo. Humans:
 
 ## What this is
 **LootunCoop** — co-op multiplayer (up to 3 players, direct IP over VPN, normal missions first, raids later) as a BepInEx 5 + HarmonyLib
-mod for **Lootun** (Unity 2021.3, Mono, game code in `Assembly-CSharp`, namespaces `LootClicker.*`). Currently **transport only**: host/join, handshake,
-heartbeats and a test chat (F7 panel); no game state is shared yet.
+mod for **Lootun** (Unity 2021.3, Mono, game code in `Assembly-CSharp`, namespaces `LootClicker.*`). Host-authoritative: guests upload one
+character each, the host runs the co-op mission, clients watch it through a non-ticking mirror fed by interpolated snapshots; rewards are split.
+Playtested for real, still rough. `README.md` is the player/developer guide (install, connecting, settings, troubleshooting): keep it in sync
+with anything that changes how people install, connect or play.
 Design, phases and risks live in `docs/MULTIPLAYER.md` — read it first and keep it updated.
 Answer the user in the language they use (Brazilian Portuguese or English). Be concise.
 A sibling repo, **RoguePoison**, adds a custom class. Both mods may run together; keep this one independent of it (no shared IDs, no reference to it).
 
 ## Build
 - Windows / Visual Studio: open `LootunCoop.csproj`. `GameDir` comes from `GameDir.user.txt` (git-ignored) or `-p:GameDir=`.
-  Default: `D:\SteamLibrary\steamapps\common\Lootun`.
+  Default: `D:\SteamLibrary\steamapps\common\Lootun`. With r2modman, BepInEx is in the profile, not the game folder: set
+  `BepInExDir.user.txt` (else BepInEx/HarmonyLib types aren't found). `DeployPath.user.txt` overrides where the DLL is copied.
+- The build copies the DLL into `<BepInExDir>\plugins\LootunCoop\`. If the game is running the copy fails (`MSB3027`, file locked)
+  although compilation succeeded; to check compilation only, pass `-p:DeployPath=<some temp file>`.
+- Beware of stale copies of this repo elsewhere on the user's disk (e.g. `Repos do Lootun\LootunCoop-repo`); confirm which folder they build.
 - Target `net472`, `LangVersion latest`, nullable off. `Assembly-CSharp` is referenced with `Publicize="true"`
   (BepInEx.AssemblyPublicizer.MSBuild) because we override/call internal & protected members.
 - Without the game installed you can still compile by pointing the references at a copy of `Lootun_Data\Managed` + `BepInEx\core`.
@@ -49,13 +55,20 @@ Ask the user for `LogOutput.log` after any risky change.
   in `Lootun_Data/Managed/`); it compiles as long as nothing references `Assembly-CSharp` types yet.
 
 ## Status / next steps
-- Done: transport (`src/Net/`, tested on loopback) and phases 1-3 from `docs/MULTIPLAYER.md` (guest characters, co-op mission
-  start, client-side mirror, reward/XP split, character lock) — all implemented and compiling, but unverified in game.
-- Next: phase 4 polish (see `docs/MULTIPLAYER.md`) and, above all, an actual in-game playtest (host + join over loopback or
-  VPN) to find what breaks; nothing past phase 0 has been run in the real game yet.
-  `game-decompile/` (local, ILSpy export) is excluded from the build.
+- Done: transport and phases 1-3 from `docs/MULTIPLAYER.md` (guest characters, co-op mission start, client mirror, reward/XP
+  split, character lock). Two real playtests (host + friend over VPN) ran; mod loads cleanly (no `MethodAccessException`).
+- Playtest fixes on `main`: level-ups now resend the guest character; revived characters no longer stuck in the death pose.
+- Snapshot interpolation on `main`, playtested 2026-09-29 ("much smoother" for the joiner): protocol v4, 20 Hz timestamped
+  snapshots, client playback delayed by `InterpolationDelayMs` and interpolated; timing in `src/Net/SnapshotPlayback.cs`, unit tested.
+- On a branch, waiting for a playtest: `feature/live-guest-build-swap` (guest build changes applied every tick instead of at
+  the next stage).
+- Open from playtests: host's skill-cast visuals aren't shown to joiners (snapshots carry no cast events); guests can't
+  meaningfully act on their character mid-fight. `origin/claude/compassionate-darwin-lem96t` has an unmerged console test client.
+- Next: phase 4 polish (see `docs/MULTIPLAYER.md`). `game-decompile/` (local, ILSpy export) is excluded from the build.
 - Both developers work on everything (no fixed split).
 
 ## Style
 - Match existing code style (tabs, braces on new lines in framework files). No comments explaining the obvious.
-- Small commits; branch `feature/<name>`; PR into `main`. Commit messages: what + why.
+- Small commits; commit messages: what + why. Small confirmed fixes may go straight to `main`; new or untested-in-game behavior goes
+  on `feature/<name>` and is merged after a playtest. Everyone in a session must run the same build, so bump `Protocol.Version`
+  on any wire change (old builds then get a clear "protocol mismatch" instead of misbehaving).

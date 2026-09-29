@@ -134,6 +134,7 @@ namespace LootunCoop
 			client?.Poll();
 			if (host != null)
 				CoopHostSync.Tick(host);
+			CoopMirror.Update(UnityEngine.Time.unscaledDeltaTime);
 			AutoSendCharacter();
 		}
 
@@ -304,7 +305,7 @@ namespace LootunCoop
 						AddChat(CoopMirror.IsRunning ? "* co-op mission started" : "* co-op mission started, can't show it: " + CoopMirror.Problem);
 						break;
 					case MessageType.CoopSnapshot:
-						CoopMirror.Apply(CoopSnapshotMessage.Read(payload));
+						CoopMirror.Receive(CoopSnapshotMessage.Read(payload));
 						break;
 					case MessageType.CoopEnd:
 						CoopMirror.End();

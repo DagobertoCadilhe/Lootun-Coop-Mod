@@ -84,6 +84,8 @@ namespace LootunCoop.Net
 	/// <summary><see cref="MessageType.CoopSnapshot"/>.</summary>
 	public sealed class CoopSnapshotMessage
 	{
+		/// <summary>Host clock when the state was captured; clients play snapshots back on this timeline.</summary>
+		public long HostTimeMs;
 		public int Stage;
 		public int BossStage;
 		public bool IsBossStage;
@@ -92,6 +94,7 @@ namespace LootunCoop.Net
 
 		public byte[] Write() => Payload.Build(w =>
 		{
+			w.Write(HostTimeMs);
 			w.Write(Stage);
 			w.Write(BossStage);
 			w.Write(IsBossStage);
@@ -111,7 +114,7 @@ namespace LootunCoop.Net
 
 		public static CoopSnapshotMessage Read(byte[] payload) => Payload.Parse(payload, r =>
 		{
-			var s = new CoopSnapshotMessage { Stage = r.ReadInt32(), BossStage = r.ReadInt32(), IsBossStage = r.ReadBoolean() };
+			var s = new CoopSnapshotMessage { HostTimeMs = r.ReadInt64(), Stage = r.ReadInt32(), BossStage = r.ReadInt32(), IsBossStage = r.ReadBoolean() };
 			int nc = r.ReadByte();
 			for (int i = 0; i < nc; i++)
 			{
