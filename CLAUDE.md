@@ -58,9 +58,10 @@ Ask the user for `LogOutput.log` after any risky change.
 - Done: transport and phases 1-3 from `docs/MULTIPLAYER.md` (guest characters, co-op mission start, client mirror, reward/XP
   split, character lock). Two real playtests (host + friend over VPN) ran; mod loads cleanly (no `MethodAccessException`).
 - Playtest fixes on `main`: level-ups now resend the guest character; revived characters no longer stuck in the death pose.
-- On branches, waiting for a playtest: `feature/snapshot-interpolation` (protocol v4, 20 Hz timestamped snapshots, client
-  playback delayed by `InterpolationDelayMs` and interpolated; timing in `src/Net/SnapshotPlayback.cs`, unit tested) and
-  `feature/live-guest-build-swap` (guest build changes applied every tick instead of at the next stage).
+- Snapshot interpolation on `main`, playtested 2026-09-29 ("much smoother" for the joiner): protocol v4, 20 Hz timestamped
+  snapshots, client playback delayed by `InterpolationDelayMs` and interpolated; timing in `src/Net/SnapshotPlayback.cs`, unit tested.
+- On a branch, waiting for a playtest: `feature/live-guest-build-swap` (guest build changes applied every tick instead of at
+  the next stage).
 - Open from playtests: host's skill-cast visuals aren't shown to joiners (snapshots carry no cast events); guests can't
   meaningfully act on their character mid-fight. `origin/claude/compassionate-darwin-lem96t` has an unmerged console test client.
 - Next: phase 4 polish (see `docs/MULTIPLAYER.md`). `game-decompile/` (local, ILSpy export) is excluded from the build.

@@ -103,6 +103,7 @@ Goal: 3 players in normal missions (raids later), direct IP over a VPN (Radmin e
    starved. Over TCP there's no loss/reordering to cover, so ~2 snapshot intervals is enough (UDP games use ~3x). Simulated
    at 20 Hz with 30-80 ms jitter it never ran dry and stayed within ~10 ms of a steady delay. Attack timers blend the short
    way round when they wrap. Prediction/extrapolation doesn't fit: HP changes are RNG-driven and the guest has no live input.
+   Playtested 2026-09-29 (host + friend over VPN, default 100 ms): the joiner's view was much smoother than before.
 3. **Progression (implemented, untested in game):** host-side, inside the co-op encounter (`ProcessSlainMonster` scope):
    guest `AddExperience`/`AddSkillExperience` are forwarded to the owner (`CoopReward`) and skipped on the host; each
    `Equipment.GenerateItemDrop` goes round-robin to host/guests (a guest's drop is re-rolled on their side with their filters;
